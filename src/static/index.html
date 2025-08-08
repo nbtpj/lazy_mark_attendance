@@ -1,0 +1,293 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Full-Screen Face Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/human@3.3.5/dist/human.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #e0e7ff, #c3dafe);
+            overflow: hidden;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+
+        #video {
+            display: block;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            font-size: 1.2em;
+            font-weight: 500;
+            z-index: 20;
+        }
+
+        .spinner {
+            border: 5px solid #ffffff;
+            border-top: 5px solid #3b82f6;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error {
+            background: rgba(220, 38, 38, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 80%;
+            text-align: center;
+        }
+
+        #camera-select {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px;
+            font-size: 1em;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background: #fff;
+            z-index: 10;
+            max-width: 90%;
+        }
+    </style>
+</head>
+<body>
+<select id="camera-select" onchange="changeCamera()">
+    <option value="">Select a camera</option>
+</select>
+<div class="video-container">
+    <video id="video" autoplay muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+</div>
+<script>
+    const human = new Human.Human({
+        backend: 'webgl', // Try 'wasm' if WebGL fails
+        modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human@3.3.5/models/',
+        face: {
+            enabled: true,
+            detector: {rotation: true, return: true, mask: false}, // return tensor is used to get detected face image
+            description: {enabled: true}, // default model for face descriptor extraction is faceres
+            // mobilefacenet: { enabled: true, modelPath: 'https://vladmandic.github.io/human-models/models/mobilefacenet.json' }, // alternative model
+            // insightface: { enabled: true, modelPath: 'https://vladmandic.github.io/insightface/models/insightface-mobilenet-swish.json' }, // alternative model
+            iris: {enabled: true}, // needed to determine gaze direction
+            emotion: {enabled: false}, // not needed
+            antispoof: {enabled: true}, // enable optional antispoof module
+            liveness: {enabled: true}, // enable optional liveness module
+        },
+        body: {enabled: false},
+        hand: {enabled: false},
+        object: {enabled: false},
+        gesture: {enabled: true}, // parses face and iris gestures
+    });
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const loading = document.getElementById('loading');
+    const cameraSelect = document.getElementById('camera-select');
+    let currentStream;
+
+    async function listCameras() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        cameraSelect.innerHTML = '';
+        if (videoDevices.length === 0) {
+            const option = document.createElement('option');
+            option.text = 'No cameras found';
+            cameraSelect.appendChild(option);
+            return;
+        }
+        videoDevices.forEach((device, i) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || `Camera ${i + 1}`;
+            cameraSelect.appendChild(option);
+        });
+    }
+
+    async function setupWebcam(deviceId) {
+        try {
+            console.log('Attempting to start webcam with device:', deviceId || 'default');
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                console.log('Stopped previous stream');
+            }
+            const constraints = deviceId ? {video: {deviceId: {exact: deviceId}}} : {video: true};
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            currentStream = stream;
+            video.srcObject = stream;
+            await new Promise(resolve => video.onloadedmetadata = resolve);
+            await video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            console.log('Webcam started: resolution', video.videoWidth, 'x', video.videoHeight);
+            return true;
+        } catch (err) {
+            console.error('Webcam setup failed:', err.name, err.message);
+            loading.innerHTML = `<p class="error">Error: Could not access webcam. ${err.message}. Please allow camera access and try again.</p>`;
+            return false;
+        }
+    }
+
+    async function changeCamera() {
+        const deviceId = cameraSelect.value;
+        if (deviceId) {
+            loading.style.display = 'flex';
+            loading.innerHTML = '<div class="spinner"></div><p>Switching camera...</p>';
+            const success = await setupWebcam(deviceId);
+            if (success) {
+                console.log('Hiding loading spinner after camera switch');
+                loading.style.display = 'none';
+                await listCameras(); // Refresh camera list to ensure labels are populated
+            }
+        }
+    }
+
+    async function detectVideo() {
+        try {
+            if (video.paused || video.ended) {
+                requestAnimationFrame(detectVideo);
+                return;
+            }
+
+            // Freeze the current video frame into a buffer canvas
+            const bufferCanvas = document.createElement('canvas');
+            bufferCanvas.width = video.videoWidth;
+            bufferCanvas.height = video.videoHeight;
+            const bufferCtx = bufferCanvas.getContext('2d');
+            bufferCtx.drawImage(video, 0, 0);
+
+            // Detect on the frozen frame
+            const result = await human.detect(bufferCanvas);
+
+            // Draw detection results
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (result.face && result.face.length > 0) {
+                console.log('Faces detected:', result.face.length);
+
+                for (const face of result.face) {
+                    try {
+                        if (face.box && face.live > 0.65 && face.real > 0.65) {
+                            const [x, y, w, h] = face.box;
+
+                            // Draw bounding box
+                            ctx.strokeStyle = 'red';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(x, y, w, h);
+
+                            // Crop from frozen frame
+                            const cropCanvas = document.createElement('canvas');
+                            cropCanvas.width = w;
+                            cropCanvas.height = h;
+                            const cropCtx = cropCanvas.getContext('2d');
+                            cropCtx.drawImage(bufferCanvas, x, y, w, h, 0, 0, w, h);
+
+                            // Convert to blob & send to server
+                            cropCanvas.toBlob(async (blob) => {
+                                try {
+                                    const formData = new FormData();
+                                    formData.append('face_image', blob, 'face.jpg');
+
+                                    await fetch('/upload_face', {
+                                        method: 'POST',
+                                        body: formData
+                                    });
+                                } catch (uploadErr) {
+                                    console.error('Upload failed:', uploadErr);
+                                }
+                            }, 'image/jpeg', 0.9); // JPEG quality 90%
+                        }
+                    } catch (faceErr) {
+                        console.error('Error processing face:', faceErr);
+                    }
+                }
+            } else {
+                console.log('No faces detected');
+            }
+        } catch (err) {
+            console.error('Detection error:', err.name, err.message);
+        }
+
+        requestAnimationFrame(detectVideo);
+    }
+
+    async function main() {
+        try {
+            console.log('Starting initialization...');
+            loading.innerHTML = '<div class="spinner"></div><p>Loading models...</p>';
+            await human.load();
+            console.log('Models loaded successfully');
+            // Request webcam access to ensure device labels are available
+            loading.innerHTML = '<div class="spinner"></div><p>Requesting webcam access...</p>';
+            await setupWebcam(); // Initial webcam access to trigger permissions
+            console.log('Initial webcam access granted');
+            await listCameras();
+            console.log('Camera list populated:', cameraSelect.options.length - 1, 'cameras');
+            if (cameraSelect.options.length <= 1) {
+                loading.innerHTML = '<p class="error">Error: Only one or no cameras detected. Check device settings.</p>';
+                return;
+            }
+            loading.innerHTML = '<div class="spinner"></div><p>Starting webcam...</p>';
+            const success = await setupWebcam(); // Start webcam with default or selected device
+            if (success) {
+                console.log('Initialization complete, hiding loading spinner');
+                loading.style.display = 'none';
+                detectVideo();
+            } else {
+                console.log('Webcam setup failed, error displayed in UI');
+            }
+        } catch (err) {
+            console.error('Initialization error:', err.name, err.message);
+            loading.innerHTML = `<p class="error">Error: Failed to initialize. ${err.message}. Check console for details.</p>`;
+        }
+    }
+
+    main();
+</script>
+</body>
+</html>
