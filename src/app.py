@@ -22,6 +22,14 @@ if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
 face_db = {}
+named = []
+
+today = datetime.now().strftime('%Y_%m_%d')
+if os.path.exists(f'attendance_{today}.txt'):
+    with open(f'attendance_{today}.txt', 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            named.append(line.split(',')[0])
 
 
 def load_face_database():
@@ -77,12 +85,7 @@ def update_face_database(new_identity, new_img_path):
 
 @app.route('/')
 def serve_index():
-    return send_from_directory(app.static_folder, 'index.html')
-
-
-@app.route('/upload_face_ta', methods=['GET'])
-def serve_upload_ta():
-    return send_from_directory(app.static_folder, 'add_face.html')
+    return send_from_directory(app.static_folder, 'pure_check.html')
 
 
 @app.route('/upload_face_ta', methods=['POST'])
@@ -119,6 +122,12 @@ def upload_face_ta():
     return jsonify({'message': 'Face image and identity saved successfully'}), 200
 
 
+@app.route('/get_named', methods=['GET'])
+def get_named():
+    print("Sent list", list(set(named)))
+    return jsonify(list(set(named)))
+
+
 @app.route('/upload_face', methods=['POST'])
 def upload_face():
     if 'face_image' not in request.files:
@@ -150,11 +159,11 @@ def display_loop():
                 name = known_face_names[best_match_index]
                 text = name
                 now = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-
-                print(f'Found {name} with distance {face_distances[best_match_index]}')
-                with open(f'attendance_{today}.txt', 'a+', encoding='utf-8') as f:
-                    f.write(f'{name}, {now}, {face_distances[best_match_index]}\n')
-                    del face_db[name]
+                if name not in named:
+                    print(f'Found {name} with distance {face_distances[best_match_index]}')
+                    with open(f'attendance_{today}.txt', 'a+', encoding='utf-8') as f:
+                        f.write(f'{name}, {now}, {face_distances[best_match_index]}\n')
+                # del face_db[name]
 
         # 1. Resize to 256x256
         resized = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA)

@@ -61,67 +61,60 @@
             border-radius: 6px;
             font-size: 13px;
         }
-
-        #textBoxContainer {
+    </style>
+    <style>
+        #container {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            display: none; /* hidden by default */
-            max-width: 320px;
-            width: 90vw; /* responsive width */
-            background: rgba(255, 255, 255, 0.2); /* translucent white */
-            border: 1.5px solid rgba(255, 255, 255, 0.3);
-            border-radius: 12px;
-            padding: 15px 20px;
-            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            z-index: 9999;
+            bottom: 0;
+            /*position: relative;*/
+            z-index: 10;
+            padding: 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.35);
+            color: #fff;
+            border-radius: 8px;
+            margin: 12px;
+            /*width: max-content;*/
+            /*left: 0;*/
+            width: 90%;
+            /*background: white;*/
+            /*border-top: 2px solid #ccc;*/
+            /*z-index: 10; !* highest priority *!*/
+            /*display: flex;*/
+            /*align-items: flex-start;*/
+            /*padding: 8px;*/
+            /*box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);*/
         }
 
-        #textBoxContainer input[type="text"] {
-            width: calc(100% - 80px);
-            padding: 8px 10px;
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            border-radius: 6px;
-            font-size: 14px;
-            background: rgba(255, 255, 255, 0.15);
-            color: #000;
-            transition: border-color 0.2s ease;
-            backdrop-filter: none; /* avoid double blur */
+        #listContainer {
+            height: 120px;
+            flex: 1;
+            border: 1px solid #ccc;
+            overflow-y: auto;
+            padding: 0 10px;
+            font-family: Arial, sans-serif;
+            color: #ccc;
+            background: rgba(0, 0, 0, 0.35);
         }
 
-        #textBoxContainer input[type="text"]::placeholder {
-            color: rgba(0, 0, 0, 0.5);
+        #itemList {
+            list-style: none;
+            margin: 0;
+            padding: 0;
         }
 
-        #textBoxContainer input[type="text"]:focus {
-            border-color: #4285f4;
-            outline: none;
-            box-shadow: 0 0 6px rgba(66, 133, 244, 0.6);
-            background: rgba(255, 255, 255, 0.3);
+        #itemList li {
+            border-bottom: 1px solid #eee;
+            padding: 4px 0;
         }
 
-        #textBoxContainer button {
-            width: 60px;
+        #listrefreshBtn {
             margin-left: 8px;
-            padding: 8px 0;
-            background-color: #4285f4;
-            border: none;
-            border-radius: 6px;
-            color: white;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            box-shadow: 0 4px 10px rgba(66, 133, 244, 0.5);
+            height: 40px;
+            align-self: center;
         }
-
-        #textBoxContainer button:hover {
-            background-color: #357ae8;
-        }
-
     </style>
 </head>
 <body>
@@ -135,16 +128,16 @@
     <label for="cameraSelect">Camera</label>
     <select id="cameraSelect"></select>
     <button id="startBtn">Start</button>
-    <button id="pauseBtn" disabled>Pause</button>
-    <button id="stopBtn" disabled>Stop</button>
     <button id="refreshBtn" title="Refresh device list">⟳</button>
 </div>
-<div id="textBoxContainer">
-    <input type="text" id="textInput" placeholder="Enter text here..."/>
-    <button id="submitBtn">Submit</button>
-</div>
 
-<div class="note">Tip: Works best on HTTPS or localhost. Grant permission to see camera names.</div>
+<div id="container">
+    <div id="listContainer">
+        <ul id="itemList"></ul>
+    </div>
+    <button id="listrefreshBtn">Refresh</button>
+</div>
+<!--<div class="note">Tip: Works best on HTTPS or localhost. Grant permission to see camera names.</div>-->
 <script src="https://cdn.jsdelivr.net/npm/@vladmandic/human@3.3.5/dist/human.js"></script>
 
 <script>
@@ -186,12 +179,8 @@
         const video = document.getElementById('bgVideo');
         const select = document.getElementById('cameraSelect');
         const startBtn = document.getElementById('startBtn');
-        const pauseBtn = document.getElementById('pauseBtn');
-        const stopBtn = document.getElementById('stopBtn');
         const refreshBtn = document.getElementById('refreshBtn');
-        const textBoxContainer = document.getElementById('textBoxContainer');
-        const submitBtn = document.getElementById('submitBtn');
-        const textInput = document.getElementById('textInput');
+
 
         let currentStream = null;
         let lastDetectedFace = null;
@@ -276,7 +265,7 @@
                     for (const face of result.face) {
                         try {
                             // detecting logic
-                            if (face.box && face.live > 0.65 && face.real > 0.65) {
+                            if (face.box && face.live > 0.7 && face.real > 0.7) {
                                 const is_new_face = !isFaceKnown(face.embedding, 0.6);
                                 lastDetectedFace = face;
 
@@ -358,8 +347,6 @@
                 currentStream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = currentStream;
                 startBtn.disabled = true;
-                pauseBtn.disabled = false;
-                stopBtn.disabled = false;
                 await populateCameraList();
                 if (deviceId) select.value = deviceId;
             } catch (err) {
@@ -368,34 +355,6 @@
             }
         }
 
-        function pauseStream() {
-            const canvas = document.getElementById('freezeCanvas');
-            const ctx = canvas.getContext('2d');
-
-
-            if (!paused) {
-                // Freeze frame
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                video.style.display = 'none';
-                canvas.style.display = 'block';
-                paused = true;
-                pauseBtn.textContent = 'Resume';
-                textBoxContainer.style.display = 'block';
-
-                textInput.focus();
-            } else {
-                // Resume live view
-                canvas.style.display = 'none';
-                video.style.display = 'block';
-                paused = false;
-                pauseBtn.textContent = 'Pause';
-
-                textBoxContainer.style.display = 'none';
-            }
-        }
 
         function stopStream() {
             if (currentStream) {
@@ -404,75 +363,59 @@
             }
             video.srcObject = null;
             startBtn.disabled = false;
-            pauseBtn.disabled = true;
-            stopBtn.disabled = true;
-            pauseBtn.textContent = 'Pause';
             paused = false;
         }
 
         navigator.mediaDevices?.addEventListener?.('devicechange', populateCameraList);
 
         startBtn.addEventListener('click', () => startStream(select.value || ''));
-        pauseBtn.addEventListener('click', pauseStream);
-        stopBtn.addEventListener('click', stopStream);
         refreshBtn.addEventListener('click', populateCameraList);
         select.addEventListener('change', () => {
             if (currentStream) startStream(select.value);
         });
 
 
-        submitBtn.addEventListener('click', () => {
-            const identity = textInput.value.trim();
-
-            if (!identity) {
-                alert('Please enter an identity.');
-                textInput.focus();
-                return;
-            }
-            if (!lastDetectedFace) {
-                alert('No detected face to save.');
-                return;
-            }
-
-            const [x, y, w, h] = lastDetectedFace.box;
-
-            // Crop face image from bufferCanvas
-            const faceCanvas = document.createElement('canvas');
-            faceCanvas.width = w;
-            faceCanvas.height = h;
-            const faceCtx = faceCanvas.getContext('2d');
-            faceCtx.drawImage(bufferCanvas, x, y, w, h, 0, 0, w, h);
-
-            // Convert to blob and send
-            faceCanvas.toBlob(async (blob) => {
-                try {
-                    const formData = new FormData();
-                    formData.append('face_image', blob, 'face.jpg');
-                    formData.append('identity', identity);
-
-                    const response = await fetch('/upload_face_ta', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (!response.ok) {
-                        console.log(`Server responded with status ${response.status}`);
-                    }
-
-                    alert('Face and identity saved successfully!');
-                } catch (err) {
-                    console.error('Upload failed:', err);
-                    alert('Failed to save data: ' + err.message);
-                } finally {
-                    resumeVideo();
-                }
-            }, 'image/jpeg', 0.9);
-            pauseBtn.click();
-        });
-
         await populateCameraList();
         detectVideo();
+
     })();
+</script>
+<script>
+    const listrefreshBtn = document.getElementById('listrefreshBtn');
+    const itemList = document.getElementById('itemList');
+
+    async function fetchAndShowList() {
+        try {
+
+            const response = await fetch('/get_named');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log('receive' + data);
+            if (Array.isArray(data)) {
+                updateList(data);
+            } else {
+                console.error('Response data is not an array:', data);
+            }
+        } catch (error) {
+            console.error('Error fetching list:', error);
+        }
+    }
+
+    function updateList(items) {
+        itemList.innerHTML = ''; // Clear existing items
+        for (const item of items) {
+            const li = document.createElement('li');
+            li.textContent = item;
+            itemList.appendChild(li);
+        }
+    }
+
+    listrefreshBtn.addEventListener('click', fetchAndShowList);
+
+    // Optionally fetch once on page load:
+    fetchAndShowList();
 </script>
 </body>
 </html>
