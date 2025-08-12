@@ -87,7 +87,9 @@ def update_face_database(new_identity, new_img_path):
 def serve_index():
     return send_from_directory(app.static_folder, 'pure_check.html')
 
-
+@app.route('/upload_face_ta', methods=['GET'])
+def get_index_ta():
+    return send_from_directory(app.static_folder, 'upload_db.html')
 @app.route('/upload_face_ta', methods=['POST'])
 def upload_face_ta():
     if 'face_image' not in request.files:
@@ -177,6 +179,7 @@ def display_loop():
 
         cv2.putText(resized, text, org, font, font_scale, color, thickness, cv2.LINE_AA)
         cv2.imshow("Received Face", resized)
+
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
